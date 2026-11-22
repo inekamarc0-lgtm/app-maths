@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<title>MathPad — Brouillon Mathématique Propre</title>
+<style>
+  :root {
+    --bg-app: #0f1115;
+    --bg-card: #181b21;
+    --bg-input: #22262f;
+    --bg-toolbar: #1c2028;
+    --border: #2e3440;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --success: #10b981;
+    --danger: #ef4444;
+    --connector: #38bdf8;
+    --math-size: 20px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-math: "Cambria Math", "Times New Roman", Times, serif;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { height: 100%; }
+  body {
+    margin: 0; padding: 0; background-color: var(--bg-app); color: var(--text-main);
+    font-family: var(--font-sans); display: flex; flex-direction: column;
+    height: 100%; height: 100vh; height: 100dvh; overflow: hidden;
+  }
+
+  /* --- HEADER --- */
+  header {
+    position: relative; z-index: 30; background-color: var(--bg-card); border-bottom: 1px solid var(--border);
+    padding: 4px 8px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .title-group { display: flex; align-items: center; flex: 1; min-width: 0; margin-right: 8px; }
+  #exo-title {
+    background: transparent; border: 1px solid transparent; color: var(--text-main); font-family: inherit;
+    font-size: 0.8rem; font-weight: 600; padding: 3px 6px; border-radius: 6px; width: 100%;
+  }
+  #exo-title:focus { outline: none; background: var(--bg-input); border-color: var(--accent); }
+
+  .icon-btn {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main);
+    padding: 7px 10px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; cursor: pointer; font-family: inherit;
+  }
+  .icon-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .menu-wrap { position: relative; flex-shrink: 0; }
+  #menu-btn { padding: 3px 11px; font-size: 1.05rem; line-height: 1.3; }
+  .menu-panel {
+    position: absolute; right: 0; top: calc(100% + 8px); min-width: 250px; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.55);
+    padding: 6px; display: flex; flex-direction: column;
+  }
+  .menu-panel[hidden] { display: none; }
+  .menu-item {
+    background: transparent; border: none; color: var(--text-main); text-align: left; padding: 10px 12px;
+    border-radius: 8px; font-size: .9rem; font-family: inherit; cursor: pointer;
+  }
+  .menu-item:hover, .menu-item:active { background: var(--bg-input); }
+  .menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
+  .menu-size { padding: 8px 12px 10px; }
+  .menu-size-title { font-size: .78rem; color: var(--text-muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .menu-size-row { display: flex; align-items: center; }
+  .menu-size-row > * + * { margin-left: 8px; }
+  .menu-size-row input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+  .menu-size-row .icon-btn { padding: 3px 9px; }
+
+  /* --- WORKSPACE --- */
+  #workspace {
+    flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 8px 10px 40px 10px;
+  }
+  #steps-list { display: flex; flex-direction: column; padding-top: 6px; }
+  /* Lignes sans cadre : aucun carré visible */
+  .step-row { display: flex; align-items: center; padding: 0; margin: 0; background: none; border: none; }
+  .step-num { flex: 0 0 1.7em; font-size: .72rem; font-weight: 700; color: var(--accent); user-select: none; }
+  .step-content { flex: 1; min-width: 0; }
+  .step-row.active .step-input { color: #cbd5e1; }
+
+  .step-input {
+    width: 100%; background: transparent; border: none; color: var(--text-main);
+    font-family: monospace; font-size: calc(var(--math-size) * 0.85); padding: 1px 0; outline: none;
+  }
+  .step-rendered, .step-preview {
+    font-family: var(--font-math); font-size: var(--math-size); line-height: 1.6;
+    color: var(--text-main); word-break: break-word;
+  }
+  .step-rendered { cursor: pointer; min-height: 1.4em; display: block; }
+  .step-rendered.empty-placeholder { color: var(--text-muted); font-family: var(--font-sans); font-size: 0.9rem; font-style: italic; }
+  .step-preview { margin-top: 2px; padding-top: 2px; border-top: 1px dashed var(--border); }
+  .step-preview:empty { display: none; }
+  .step-rendered i, .step-preview i { font-style: italic; }
+
+  /* Éléments mathématiques */
+  .op.bin { margin: 0 .22em; }
+  .op.rel { margin: 0 .32em; }
+  .op.un { margin: 0 .05em 0 .1em; }
+  .fn { margin-right: .12em; }
+  .big { font-size: 1.35em; vertical-align: -0.1em; }
+  .tx { white-space: pre-wrap; }
+  .tx.b, .mb { font-weight: 700; }
+  .it { font-style: italic; }
+  .ov { border-top: 1.3px solid currentColor; }
+  .ul { border-bottom: 1.3px solid currentColor; }
+  .boxed { border: 1px solid currentColor; padding: 0 .3em; }
+  .acc { position: relative; display: inline-block; }
+  .acc::before { content: attr(data-a); position: absolute; left: 0; right: 0; top: -.55em; text-align: center; font-size: .8em; line-height: 1; }
+  .acc.hat::before {
+    content: ''; left: .05em; right: .05em; top: -.2em; height: .34em; font-size: inherit;
+    background:
+      linear-gradient(to top left, transparent calc(50% - .75px), currentColor calc(50% - .75px), currentColor calc(50% + .75px), transparent calc(50% + .75px)) left / 50% 100% no-repeat,
+      linear-gradient(to top right, transparent calc(50% - .75px), currentColor calc(50% - .75px), currentColor calc(50% + .75px), transparent calc(50% + .75px)) right / 50% 100% no-repeat;
+  }
+  .ph { display: inline-block; min-width: .6em; height: .8em; border: 1px dashed var(--text-muted); border-radius: 2px; vertical-align: middle; }
+  .ss { display: inline-flex; flex-direction: column; vertical-align: middle; font-size: .72em; line-height: 1.15; }
+
+  .math-frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 .2em; line-height: 1.3; }
+  .math-frac .math-frac { font-size: .85em; }
+  .math-num { border-bottom: 1.5px solid currentColor; padding: 0 .3em .05em .3em; text-align: center; }
+  .math-den { padding: .05em .3em 0 .3em; text-align: center; }
+  .binom .math-num { border-bottom: none; }
+  sup, sub { font-size: .72em; line-height: 0; }
+  sup { vertical-align: super; }
+  sub { vertical-align: sub; }
+  .math-sqrt { display: inline-flex; align-items: stretch; }
+  .math-sqrt-rad { border-top: 1.3px solid currentColor; padding: 0 .15em; margin-left: 1px; }
+  .rt-idx { align-self: flex-start; margin-right: -.2em; }
+
+  #toolbar-container {
+    background-color: var(--bg-toolbar); border-top: 1px solid var(--border);
+    padding: 8px; display: flex; flex-direction: column; flex-shrink: 0; z-index: 20;
+  }
+  .toolbar-row { display: flex; align-items: center; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin-bottom: 7px; }
+  .toolbar-row::-webkit-scrollbar { display: none; }
+  .toolbar-row > * + * { margin-left: 6px; }
+  .tool-btn {
+    background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main);
+    border-radius: 8px; padding: 8px 11px; font-size: 0.95rem; white-space: nowrap; cursor: pointer; flex-shrink: 0;
+    font-family: inherit;
+  }
+  .tool-btn.conn { color: var(--connector); background: rgba(56, 189, 248, 0.08); border-color: rgba(56, 189, 248, 0.25); }
+  .tool-btn.conn.selected { background: var(--connector); color: #0f1115; }
+
+  .action-bar { display: flex; }
+  .action-bar > * + * { margin-left: 8px; }
+  .btn-dup, .btn-next {
+    border-radius: 9px; padding: 10px 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-family: inherit; font-size: 0.95rem;
+  }
+  .btn-dup > * + *, .btn-next > * + * { margin-left: 5px; }
+  .btn-dup { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); flex: 1; }
+  .btn-next { background: var(--accent); border: none; color: #fff; flex: 1.6; font-weight: 700; }
+
+  /* --- MODAL --- */
+  .modal-backdrop {
+    position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,0.75);
+    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 100;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 460px; max-height: 85vh; max-height: 85dvh; display: flex; flex-direction: column; overflow: hidden; }
+  .modal-header, .modal-footer { padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .modal-header { border-bottom: 1px solid var(--border); font-weight: 600; }
+  .modal-footer { border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .modal-footer > * { margin: 3px 4px 3px 0; }
+  .modal-body { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; }
+  .modal-body > * + * { margin-top: 10px; }
+
+  .saved-item { background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; }
+  .saved-info { flex: 1; cursor: pointer; min-width: 0; }
+  .saved-title { font-weight: 600; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .saved-meta { font-size: 0.78rem; color: var(--text-muted); }
+
+  .status-toast {
+    position: fixed; top: 60px; left: 50%; transform: translateX(-50%); background: var(--success); color: #06281e;
+    font-weight: 600; font-size: 0.85rem; padding: 6px 14px; border-radius: 20px; opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 200;
+  }
+  .status-toast.show { opacity: 1; }
+
+  #print-header { display: none; }
+
+  @media print {
+    html, body { height: auto !important; overflow: visible !important; display: block !important; background: #fff !important; color: #000 !important; }
+    header, .step-preview, #toolbar-container, .del-step-btn, .modal-backdrop, .status-toast { display: none !important; }
+    #print-header { display: block !important; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 18px; }
+    #workspace { padding: 0 !important; overflow: visible !important; display: block !important; }
+    .step-row { background: transparent !important; border: none !important; border-bottom: 1px solid #e5e7eb !important; box-shadow: none !important; padding: 8px 4px !important; page-break-inside: avoid; }
+    .step-rendered, .step-input, .step-num { color: #000 !important; }
+    .step-connector { color: #000 !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="status-toast" class="status-toast">Enregistré</div>
+
+<header>
+  <div class="title-group">
+    <input type="text" id="exo-title" value="Exercice 1" aria-label="Titre de l'exercice">
+  </div>
+  <div class="menu-wrap">
+    <button type="button" class="icon-btn" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="Menu">☰</button>
+    <div class="menu-panel" id="menu-panel" hidden>
+      <button type="button" class="menu-item" id="btn-new">＋ Nouvel exercice</button>
+      <button type="button" class="menu-item" id="btn-library">📂 Dossiers</button>
+      <button type="button" class="menu-item" id="btn-pdf">📄 Exporter en PDF</button>
+      <div class="menu-sep"></div>
+      <div class="menu-size">
+        <div class="menu-size-title"><span>Taille du texte</span><span id="font-label">20 px</span></div>
+        <div class="menu-size-row">
+          <button type="button" class="icon-btn" id="font-minus" aria-label="Réduire la police">A−</button>
+          <input type="range" id="font-range" min="6" max="44" step="1" value="20" aria-label="Taille du texte">
+          <button type="button" class="icon-btn" id="font-plus" aria-label="Agrandir la police">A+</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div id="workspace">
+  <div id="print-header">
+    <h2 id="print-title" style="margin:0;">Exercice 1</h2>
+    <small id="print-date" style="color:#555;"></small>
+  </div>
+  <div id="steps-list"></div>
+</div>
+
+<div id="toolbar-container">
+  <div class="toolbar-row">
+    <button type="button" class="tool-btn" data-action="insert" data-val=" ⇔ ">⇔</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val=" ⇒ ">⇒</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val=" → ">→</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val="()">( )</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val="[]">[ ]</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val="«»">« »</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val=" = ">=</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val=" + ">+</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val=" - ">−</button>
+  </div>
+  <div class="toolbar-row">
+    <button type="button" class="tool-btn" data-action="insert" data-val="^2">x²</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val="^3">x³</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val="^">xⁿ</button>
+    <button type="button" class="tool-btn" data-action="frac">a/b</button>
+    <button type="button" class="tool-btn" data-action="sqrt">√</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val=" * ">×</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val=" <= ">≤</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val=" >= ">≥</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val=" != ">≠</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val="pi">π</button>
+    <button type="button" class="tool-btn" data-action="insert" data-val="inf">∞</button>
+  </div>
+  <div class="toolbar-row">
+    <button type="button" class="tool-btn" data-action="wrap" data-val="sin">sin</button>
+    <button type="button" class="tool-btn" data-action="wrap" data-val="cos">cos</button>
+    <button type="button" class="tool-btn" data-action="wrap" data-val="tan">tan</button>
+    <button type="button" class="tool-btn" data-action="wrap" data-val="hat" aria-label="Angle (chapeau)">Â</button>
+  </div>
+  <div class="action-bar">
+    <button type="button" class="btn-dup" id="btn-dup"><span>Dupliquer</span><span>↓</span></button>
+    <button type="button" class="btn-dup" id="btn-mark"><span>N° partie</span></button>
+    <button type="button" class="btn-next" id="btn-copy"><span>Tout copier</span></button>
+  </div>
+</div>
+
+<div id="library-modal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <span>Mes Exercices (JSON)</span>
+      <button type="button" class="icon-btn" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body" id="saved-list"></div>
+    <div class="modal-footer">
+      <button type="button" class="icon-btn primary" id="modal-save-arch">💾 Archiver</button>
+      <button type="button" class="icon-btn" id="modal-dl-json">⬇ Exporter JSON</button>
+      <label class="icon-btn" style="cursor:pointer;">
+        ⬆ Importer JSON
+        <input type="file" id="json-import" accept=".json,application/json" style="display:none;">
+      </label>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ==========================================================================
+     1. MOTEUR MATHÉMATIQUE : syntaxe simple + LaTeX  ->  HTML
+     ========================================================================== */
+  var MathEngine = (function () {
+    function table(s) {
+      var o = {};
+      s.split(' ').forEach(function (p) { var i = p.indexOf(':'); o[p.slice(0, i)] = p.slice(i + 1); });
+      return o;
+    }
+    function set(s) { var o = {}; s.split(' ').forEach(function (c) { o[c] = 1; }); return o; }
+
+    var REL = set('= ≠ ≤ ≥ < > ⇒ ⇔ → ← ⇐ ≈ ≡ ∼ ∈ ∉ ⊂ ⊆ ↦ ∝ ∥ ⊥ ≪ ≫ ⟶ ⟹ ⟺ ↔');
+    var BIN = set('+ − × ÷ ⋅ ± ∓ ∪ ∩ ∧ ∨ ∘ ⋆ ∖');
+
+    var CMD_OP = table('times:× div:÷ cdot:⋅ pm:± mp:∓ leq:≤ le:≤ geq:≥ ge:≥ neq:≠ ne:≠ approx:≈ equiv:≡ sim:∼ to:→ rightarrow:→ longrightarrow:⟶ leftarrow:← Rightarrow:⇒ implies:⇒ Longrightarrow:⟹ Leftrightarrow:⇔ iff:⇔ Longleftrightarrow:⟺ Leftarrow:⇐ leftrightarrow:↔ mapsto:↦ in:∈ notin:∉ subset:⊂ subseteq:⊆ cup:∪ cap:∩ land:∧ wedge:∧ lor:∨ vee:∨ propto:∝ parallel:∥ perp:⊥ circ:∘ ll:≪ gg:≫ setminus:∖ star:⋆ lt:< gt:> ast:×');
+    var CMD_ATOM = table('infty:∞ partial:∂ nabla:∇ emptyset:∅ varnothing:∅ angle:∠ hbar:ℏ ell:ℓ aleph:ℵ degree:° triangle:△ therefore:∴ because:∵ neg:¬ lnot:¬ forall:∀ exists:∃ Re:ℜ Im:ℑ');
+    var CMD_SYM = {
+      ldots: '…', cdots: '⋯', dots: '…', vdots: '⋮', ddots: '⋱', prime: '′',
+      '%': '%', '$': '$', '&': '&', '#': '#', '_': '_', '{': '{', '}': '}', '|': '‖',
+      ',': ' ', ';': ' ', ':': ' ', '!': '', ' ': ' ', quad: ' ', qquad: '  ',
+      langle: '⟨', rangle: '⟩', lfloor: '⌊', rfloor: '⌋', lceil: '⌈', rceil: '⌉',
+      vert: '|', lvert: '|', rvert: '|', Vert: '‖', lVert: '‖', rVert: '‖', backslash: '\\'
+    };
+    var BIG = table('sum:∑ prod:∏ int:∫ iint:∬ iiint:∭ oint:∮ bigcup:⋃ bigcap:⋂ coprod:∐');
+    var GREEK_L = table('alpha:α beta:β gamma:γ delta:δ epsilon:ε varepsilon:ε zeta:ζ eta:η theta:θ vartheta:ϑ iota:ι kappa:κ lambda:λ mu:μ nu:ν xi:ξ pi:π varpi:ϖ rho:ρ varrho:ϱ sigma:σ varsigma:ς tau:τ upsilon:υ phi:φ varphi:φ chi:χ psi:ψ omega:ω');
+    var GREEK_U = table('Gamma:Γ Delta:Δ Theta:Θ Lambda:Λ Xi:Ξ Pi:Π Sigma:Σ Upsilon:Υ Phi:Φ Psi:Ψ Omega:Ω');
+    var NATIVE_L = set('alpha beta gamma delta epsilon theta lambda sigma omega phi rho tau');
+    var NATIVE_U = set('Gamma Delta Theta Lambda Sigma Phi Psi Omega');
+    var FUNC = set('sin cos tan cot sec csc arcsin arccos arctan sinh cosh tanh coth ln log lg exp lim liminf limsup min max det dim ker gcd sup deg arg mod');
+    var WORD_PREFIX = ['arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'ln', 'log', 'lim', 'exp'];
+    var ACC = table('hat:^ tilde:~ vec:→ dot:˙ ddot:¨ widehat:^ widetilde:~ overrightarrow:→');
+    var BB = { R: 'ℝ', N: 'ℕ', Z: 'ℤ', Q: 'ℚ', C: 'ℂ', P: 'ℙ', H: 'ℍ' };
+    var RAW_TEXT = set('text textrm textbf textit mbox mathrm operatorname mathsf mathtt');
+    var NOOP = set('displaystyle textstyle scriptstyle limits nolimits nonumber notag hline');
+    var TEXTWORD = set('Donc donc Or Car car Alors alors');
+    var DELIM = set('left right big Big bigg Bigg bigl bigr Bigl Bigr biggl biggr Biggl Biggr');
+
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    /* ---------- 1. Analyse lexicale ---------- */
+    function lexOne(src, i, t) {
+      var c = src.charAt(i), rest = src.slice(i), m;
+
+      if (/\s/.test(c)) { m = /^\s+/.exec(rest); t.push({ k: 'ws' }); return i + m[0].length; }
+
+      if (c === '\\') {
+        m = /^\\([A-Za-z]+)/.exec(rest);
+        if (m) { t.push({ k: 'cmd', v: m[1] }); return i + m[0].length; }
+        var d = src.charAt(i + 1);
+        if (d === '(' || d === ')' || d === '[' || d === ']') return i + 2;   // délimiteurs \( \) \[ \]
+        if (d === '\\') { t.push({ k: 'br' }); return i + 2; }
+        if (d) { t.push({ k: 'cmd', v: d }); return i + 2; }
+        return i + 1;
+      }
+      if (c === '$') return i + 1;
+      if (c === '"' || c === '«') {
+        var endCh = c === '"' ? '"' : '»';
+        var j = src.indexOf(endCh, i + 1); if (j < 0) j = src.length;
+        t.push({ k: 'text', v: src.slice(i + 1, j) });
+        return j + 1;
+      }
+      if (c === '√') { t.push({ k: 'cmd', v: 'sqrt' }); return i + 1; }
+
+      m = /^\d+(?:[.,]\d+)?/.exec(rest);
+      if (m) { t.push({ k: 'num', v: m[0] }); return i + m[0].length; }
+
+      if (/[A-Za-z]/.test(c)) {
+        var w = /^[A-Za-z]+/.exec(rest)[0], lw = w.toLowerCase();
+        if (w === 'sqrt') t.push({ k: 'cmd', v: 'sqrt' });
+        else if (w === 'hat') t.push({ k: 'cmd', v: 'widehat' });
+        else if (TEXTWORD[w]) t.push({ k: 'text', v: w });
+        else if (lw === 'pi') t.push({ k: 'var', v: 'π' });
+        else if (lw === 'inf') t.push({ k: 'atom', v: '∞' });
+        else if (NATIVE_L[w]) t.push({ k: 'var', v: GREEK_L[w] });
+        else if (NATIVE_U[w]) t.push({ k: 'var', v: GREEK_U[w], up: true });
+        else if (FUNC[w]) t.push({ k: 'func', v: w });
+        else {
+          var f = null;
+          for (var q = 0; q < WORD_PREFIX.length; q++) {
+            var pf = WORD_PREFIX[q];
+            if (w.indexOf(pf) === 0 && w.length - pf.length <= 2) { f = pf; break; }
+          }
+          var from = 0;
+          if (f) { t.push({ k: 'func', v: f }); from = f.length; }
+          for (var y = from; y < w.length; y++) t.push({ k: 'var', v: w.charAt(y) });
+        }
+        return i + w.length;
+      }
+
+      var s2 = src.substr(i, 2), s3 = src.substr(i, 3);
+      if (s3 === '<=>') { t.push({ k: 'op', v: '⇔' }); return i + 3; }
+      if (s3 === '<->') { t.push({ k: 'op', v: '↔' }); return i + 3; }
+      var m2 = { '=>': '⇒', '->': '→', '<=': '≤', '>=': '≥', '!=': '≠', '==': '=' }[s2];
+      if (m2) { t.push({ k: 'op', v: m2 }); return i + 2; }
+
+      if (c === '-' || c === '–') t.push({ k: 'op', v: '−' });
+      else if (c === '*') t.push({ k: 'op', v: '×' });
+      else if (c === '·') t.push({ k: 'op', v: '⋅' });
+      else if (c === '+' || c === '=' || c === '<' || c === '>' || REL[c] || BIN[c]) t.push({ k: 'op', v: c });
+      else if (c === '(' || c === '[') t.push({ k: 'open', v: c });
+      else if (c === ')' || c === ']') t.push({ k: 'close', v: c });
+      else if (c === '{') t.push({ k: 'lb' });
+      else if (c === '}') t.push({ k: 'rb' });
+      else if (c === '^') t.push({ k: 'sup' });
+      else if (c === '_') t.push({ k: 'sub' });
+      else if (c === '/') t.push({ k: 'slash' });
+      else if (c === '&') t.push({ k: 'ws' });
+      else if (c === "'") t.push({ k: 'sym', v: '′' });
+      else if (/[α-ω]/.test(c)) t.push({ k: 'var', v: c });
+      else if (/[Α-Ω]/.test(c)) t.push({ k: 'var', v: c, up: true });
+      else t.push({ k: 'sym', v: c });
+      return i + 1;
+    }
+
+    function tokenize(src) {
+      var t = [], i = 0;
+      while (i < src.length) {
+        var st = i, b = t.length;
+        i = lexOne(src, i, t);
+        for (var k = b; k < t.length; k++) { t[k].s = st; t[k].e = i; }
+      }
+      return t;
+    }
+
+    /* ---------- 2. Aide pour les fractions ---------- */
+    function isFactor(n) {
+      var t = n.t;
+      return t === 'num' || t === 'var' || t === 'atom' || t === 'group' || t === 'grp' || t === 'pow' ||
+             t === 'frac' || t === 'sqrt' || t === 'func' || t === 'big' || t === 'style' || t === 'acc' || t === 'text';
+    }
+    function isGrp(n) { return n.t === 'group' || (n.t === 'pow' && n.base && n.base.t === 'group'); }
+    function unwrap(list) {
+      if (list.length === 1 && list[0].t === 'group' && list[0].o === '(') return list[0].body;
+      return list;
+    }
+
+    function buildFractions(a) {
+      var i = 0;
+      while (i < a.length) {
+        if (a[i].t !== 'slash') { i++; continue; }
+
+        // numérateur : facteurs contigus juste avant la barre
+        var e = i - 1; while (e >= 0 && a[e].t === 'ws') e--;
+        var s = e + 1;
+        if (e >= 0 && isFactor(a[e])) {
+          s = e;
+          while (s > 0) {
+            var q = s - 1, gap = false;
+            while (q >= 0 && a[q].t === 'ws') { q--; gap = true; }
+            if (q < 0 || !isFactor(a[q])) break;
+            if (gap && !(isGrp(a[q]) && isGrp(a[s])) && a[q].t !== 'func') break;
+            s = q;
+          }
+        } else { e = s - 1; }
+
+        // dénominateur : facteurs contigus juste après la barre
+        var d0 = i + 1; while (d0 < a.length && a[d0].t === 'ws') d0++;
+        var d1 = d0 - 1;
+        if (d0 < a.length && isFactor(a[d0])) {
+          d1 = d0;
+          while (d1 + 1 < a.length) {
+            var r = d1 + 1, gap2 = false;
+            while (r < a.length && a[r].t === 'ws') { r++; gap2 = true; }
+            if (r >= a.length || !isFactor(a[r])) break;
+            if (gap2 && !(isGrp(a[r]) && isGrp(a[d1])) && a[d1].t !== 'func') break;
+            d1 = r;
+          }
+        }
+
+        var f = { t: 'frac', num: unwrap(a.slice(s, e + 1)), den: unwrap(a.slice(d0, d1 + 1)) };
+        a.splice(s, d1 - s + 1, f);
+        i = s + 1;
+      }
+      return a;
+    }
+
+    function cleanWs(a) {
+      var out = [];
+      for (var i = 0; i < a.length; i++) {
+        var n = a[i];
+        if (n.t === 'ws') {
+          var prev = out[out.length - 1], next = a[i + 1];
+          if (!prev || prev.t === 'op' || prev.t === 'br' || prev.t === 'ws') continue;
+          if (!next || next.t === 'op' || next.t === 'br' || next.t === 'ws') continue;
+        }
+        out.push(n);
+      }
+      for (var k = 0; k < out.length; k++) {
+        var o = out[k];
+        if (o.t === 'op' && (o.v === '−' || o.v === '+' || o.v === '±' || o.v === '∓')) {
+          var pv = out[k - 1];
+          if (!pv || pv.t === 'op' || pv.t === 'br' || (pv.t === 'sym' && /^[,;:]$/.test(pv.v))) o.un = true;
+        }
+      }
+      return out;
+    }
+
+    /* ---------- 3. Rendu HTML ---------- */
+    function slot(list) { return list && list.length ? R(list) : '<span class="ph"></span>'; }
+    function R(list) { var s = ''; for (var i = 0; i < list.length; i++) s += r1(list[i]); return s; }
+
+    function r1(n) {
+      switch (n.t) {
+        case 'ws': return ' ';
+        case 'br': return '<br>';
+        case 'num': case 'atom': case 'sym': return esc(n.v);
+        case 'var': return n.up ? esc(n.v) : '<i>' + esc(n.v) + '</i>';
+        case 'text': return '<span class="tx' + (n.b ? ' b' : '') + '">' + esc(n.v) + '</span>';
+        case 'func': return '<span class="fn">' + esc(n.v) + '</span>';
+        case 'big': return '<span class="big">' + esc(n.v) + '</span>';
+        case 'op': return '<span class="op ' + (REL[n.v] ? 'rel' : 'bin') + (n.un ? ' un' : '') + '">' + esc(n.v) + '</span>';
+        case 'group': return esc(n.o) + R(n.body) + esc(n.c);
+        case 'grp': return R(n.body);
+        case 'frac':
+          var fr = '<span class="math-frac' + (n.binom ? ' binom' : '') + '"><span class="math-num">' + slot(n.num) +
+                   '</span><span class="math-den">' + slot(n.den) + '</span></span>';
+          return n.binom ? '(' + fr + ')' : fr;
+        case 'sqrt':
+          return '<span class="math-sqrt">' + (n.idx && n.idx.length ? '<sup class="rt-idx">' + R(n.idx) + '</sup>' : '') +
+                 '√<span class="math-sqrt-rad">' + slot(n.body) + '</span></span>';
+        case 'pow':
+          var b = n.base ? r1(n.base) : '';
+          if (n.sup && n.sub) return b + '<span class="ss"><span>' + R(n.sup) + '</span><span>' + R(n.sub) + '</span></span>';
+          if (n.sup) return b + '<sup>' + R(n.sup) + '</sup>';
+          return b + '<sub>' + R(n.sub || []) + '</sub>';
+        case 'style': return '<span class="' + n.cls + '">' + R(n.body) + '</span>';
+        case 'acc':
+          if (n.a === '^') return '<span class="acc hat">' + R(n.body) + '</span>';
+          return '<span class="acc" data-a="' + esc(n.a) + '">' + R(n.body) + '</span>';
+      }
+      return '';
+    }
+
+    /* ---------- 4. Analyse syntaxique ---------- */
+    function formatHTML(raw) {
+      if (!raw || !raw.trim()) return '';
+      var src = String(raw), tokens = tokenize(src), p = 0, latex = src.indexOf('\\') >= 0;
+
+      function skipWs() { while (tokens[p] && tokens[p].k === 'ws') p++; }
+      function closeIf(kind) { if (tokens[p] && tokens[p].k === kind) { var v = tokens[p].v; p++; return v || ''; } return ''; }
+
+      function seq(stop) {
+        var out = [];
+        while (p < tokens.length) {
+          var tk = tokens[p];
+          if (stop[tk.k]) break;
+          p++;
+          handle(tk, out);
+        }
+        return cleanWs(buildFractions(out));
+      }
+
+      function arg(stripParen) {
+        skipWs();
+        var tk = tokens[p];
+        if (!tk) return [];
+        if (tk.k === 'lb') { p++; var b = seq({ rb: 1 }); closeIf('rb'); return b; }
+        if (stripParen && tk.k === 'open' && tk.v === '(') { p++; var g = seq({ close: 1 }); closeIf('close'); return g; }
+        var out = [];
+        if (tk.k === 'op' && (tk.v === '−' || tk.v === '+')) { p++; out.push({ t: 'op', v: tk.v, un: true }); tk = tokens[p]; }
+        if (tk && /^(num|var|atom|sym|cmd|func)$/.test(tk.k)) { p++; handle(tk, out); }
+        return out;
+      }
+
+      function rawArg() {
+        skipWs();
+        var tk = tokens[p];
+        if (!tk) return '';
+        if (tk.k === 'lb') {
+          var depth = 1, q = p + 1;
+          while (q < tokens.length) {
+            if (tokens[q].k === 'lb') depth++;
+            else if (tokens[q].k === 'rb' && --depth === 0) break;
+            q++;
+          }
+          var txt = q < tokens.length ? src.slice(tk.e, tokens[q].s) : src.slice(tk.e);
+          p = q + 1;
+          return txt;
+        }
+        p++;
+        return src.slice(tk.s, tk.e);
+      }
+
+      function script(kind, out) {
+        if (out.length && out[out.length - 1].t === 'ws') out.pop();
+        var base = out.length ? out.pop() : null;
+        var node = (base && base.t === 'pow') ? base : { t: 'pow', base: base, sup: null, sub: null };
+        node[kind] = arg(true);
+        out.push(node);
+      }
+
+      function command(name, out) {
+        if (CMD_OP[name]) { out.push({ t: 'op', v: CMD_OP[name] }); return; }
+        if (GREEK_L[name]) { out.push({ t: 'var', v: GREEK_L[name] }); return; }
+        if (GREEK_U[name]) { out.push({ t: 'var', v: GREEK_U[name], up: true }); return; }
+        if (FUNC[name] || name === 'inf') { out.push({ t: 'func', v: name }); return; }
+        if (BIG[name]) { out.push({ t: 'big', v: BIG[name] }); return; }
+        if (CMD_ATOM[name]) { out.push({ t: 'atom', v: CMD_ATOM[name] }); return; }
+        if (CMD_SYM[name] !== undefined) { out.push({ t: 'sym', v: CMD_SYM[name] }); return; }
+        if (ACC[name]) { out.push({ t: 'acc', a: ACC[name], body: arg(true) }); return; }
+        if (RAW_TEXT[name]) { out.push({ t: 'text', v: rawArg(), b: name === 'textbf' }); return; }
+        if (NOOP[name]) return;
+        if (DELIM[name]) { var nx = tokens[p]; if (nx && nx.k === 'sym' && nx.v === '.') p++; return; }
+        switch (name) {
+          case 'frac': case 'dfrac': case 'tfrac': case 'cfrac':
+            var a1 = arg(false), a2 = arg(false);
+            out.push({ t: 'frac', num: a1, den: a2 }); return;
+          case 'binom':
+            var b1 = arg(false), b2 = arg(false);
+            out.push({ t: 'frac', num: b1, den: b2, binom: true }); return;
+          case 'sqrt':
+            var idx = null;
+            skipWs();
+            if (tokens[p] && tokens[p].k === 'open' && tokens[p].v === '[') { p++; idx = seq({ close: 1 }); closeIf('close'); }
+            out.push({ t: 'sqrt', idx: idx, body: arg(true) }); return;
+          case 'mathbf': case 'boldsymbol': case 'bm':
+            out.push({ t: 'style', cls: 'mb', body: arg(false) }); return;
+          case 'mathbb':
+            var bt = rawArg();
+            out.push({ t: 'text', v: bt.replace(/[A-Z]/g, function (ch) { return BB[ch] || ch; }) }); return;
+          case 'mathcal': case 'mathit': case 'mathscr':
+            out.push({ t: 'style', cls: 'it', body: arg(false) }); return;
+          case 'overline': case 'bar': case 'overbar':
+            out.push({ t: 'style', cls: 'ov', body: arg(false) }); return;
+          case 'underline':
+            out.push({ t: 'style', cls: 'ul', body: arg(false) }); return;
+          case 'boxed':
+            out.push({ t: 'style', cls: 'boxed', body: arg(false) }); return;
+          case 'begin': case 'end':
+            rawArg(); return;
+        }
+        out.push({ t: 'sym', v: '\\' + name });
+      }
+
+      function handle(tk, out) {
+        switch (tk.k) {
+          case 'ws': out.push({ t: 'ws' }); break;
+          case 'br': out.push({ t: 'br' }); break;
+          case 'num': out.push({ t: 'num', v: tk.v }); break;
+          case 'var': out.push({ t: 'var', v: tk.v, up: tk.up }); break;
+          case 'atom': out.push({ t: 'atom', v: tk.v }); break;
+          case 'sym': out.push({ t: 'sym', v: tk.v }); break;
+          case 'text': out.push({ t: 'text', v: tk.v }); break;
+          case 'func': out.push({ t: 'func', v: tk.v }); break;
+          case 'op': out.push({ t: 'op', v: tk.v }); break;
+          case 'slash': out.push({ t: 'slash' }); break;
+          case 'sup': script('sup', out); break;
+          case 'sub': script('sub', out); break;
+          case 'cmd': command(tk.v, out); break;
+          case 'open':
+            var body = seq({ close: 1 });
+            out.push({ t: 'group', o: tk.v, c: closeIf('close'), body: body });
+            break;
+          case 'close': out.push({ t: 'sym', v: tk.v }); break;
+          case 'lb':
+            var inner = seq({ rb: 1 });
+            closeIf('rb');
+            if (latex) out.push({ t: 'grp', body: inner });
+            else out.push({ t: 'group', o: '{', c: '}', body: inner });
+            break;
+          case 'rb': out.push({ t: 'sym', v: '}' }); break;
+        }
+      }
+
+      return R(seq({}));
+    }
+
+    /* ---------- 5. Nettoyage d'un texte collé (autre document / autre IA) ---------- */
+    var CONNECTORS = [
+      [/^(\\Leftrightarrow|\\iff|\\Longleftrightarrow|⇔|<=>)(?![A-Za-z])\s*/, '⇔'],
+      [/^(\\Rightarrow|\\implies|\\Longrightarrow|⇒|=>)(?![A-Za-z])\s*/, '⇒'],
+      [/^(\\therefore|∴|Donc|donc)(?![A-Za-z])\s*/, 'Donc'],
+      [/^Or\s+/, 'Or'],
+      [/^(\\rightarrow|\\to|→|->)(?![A-Za-z])\s*/, '→']
+    ];
+
+    function cleanPaste(text) {
+      var s = String(text).replace(/\r\n?/g, '\n').replace(/[  ]/g, ' ');
+      s = s.replace(/\\(?:begin|end)\{(?:equation|align|aligned|gather|split|eqnarray|displaymath|math)\*?\}/g, '\n');
+      s = s.replace(/\$\$/g, '\n').replace(/\\[\[\]]/g, '\n').replace(/\\[()]/g, ' ').replace(/\$/g, '');
+      s = s.replace(/\\\\(?![A-Za-z])/g, '\n').replace(/\*\*/g, '').replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+      s = s.replace(/&/g, ' ');
+      var lines = s.split('\n').map(function (l) { return l.trim(); }).filter(function (l) { return l; });
+      return lines.map(function (l) {
+        l = l.replace(/^(•|\d+[.)])\s+/, '');
+        var conn = '';
+        for (var i = 0; i < CONNECTORS.length; i++) {
+          var m = CONNECTORS[i][0].exec(l);
+          if (m) { conn = CONNECTORS[i][1]; l = l.slice(m[0].length); break; }
+        }
+        return { raw: ((conn ? conn + ' ' : '') + l.trim()).trim() };
+      }).filter(function (x) { return x.raw; });
+    }
+
+    return { formatHTML: formatHTML, cleanPaste: cleanPaste };
+  })();
+
+  /* ==========================================================================
+     2. STOCKAGE & PERSISTANCE (localStorage avec repli mémoire + JSON)
+     ========================================================================== */
+  var memStore = {};
+  function lsGet(key) {
+    try { return localStorage.getItem(key); }
+    catch (e) { return Object.prototype.hasOwnProperty.call(memStore, key) ? memStore[key] : null; }
+  }
+  function lsSet(key, value) {
+    try { localStorage.setItem(key, value); }
+    catch (e) { memStore[key] = value; }
+  }
+
+  function normalizeState(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var steps = Array.isArray(raw.steps) ? raw.steps : [];
+    steps = steps.filter(function (s) { return s && typeof s === 'object'; }).map(function (s) {
+      return {
+        raw: (typeof s.connector === 'string' && s.connector ? s.connector + ' ' : '') + (typeof s.raw === 'string' ? s.raw : ''),
+        mark: !!s.mark,
+        editing: false
+      };
+    });
+    if (steps.length === 0) steps = [{ raw: '', editing: false }];
+    var idx = parseInt(raw.activeIndex, 10);
+    if (isNaN(idx) || idx < 0 || idx >= steps.length) idx = steps.length - 1;
+    steps[idx].editing = true;
+    return {
+      id: raw.id ? String(raw.id) : Date.now().toString(),
+      title: typeof raw.title === 'string' ? raw.title : 'Exercice',
+      updatedAt: raw.updatedAt || new Date().toISOString(),
+      activeIndex: idx,
+      steps: steps
+    };
+  }
+
+  function hasContent(st) {
+    return st.steps.some(function (s) { return s.raw.trim() !== ''; });
+  }
+
+  var StorageService = {
+    CURRENT_KEY: 'mathpad_current_draft_v5',
+    ARCHIVE_KEY: 'mathpad_saved_exercises_v5',
+
+    loadCurrent: function () {
+      try {
+        var data = lsGet(this.CURRENT_KEY);
+        return data ? normalizeState(JSON.parse(data)) : null;
+      } catch (e) { return null; }
+    },
+
+    saveCurrent: function (st) {
+      try {
+        st.updatedAt = new Date().toISOString();
+        lsSet(this.CURRENT_KEY, JSON.stringify(st));
+      } catch (e) { console.error(e); }
+    },
+
+    getArchive: function () {
+      try {
+        var a = JSON.parse(lsGet(this.ARCHIVE_KEY));
+        return Array.isArray(a) ? a : [];
+      } catch (e) { return []; }
+    },
+
+    setArchive: function (arr) {
+      lsSet(this.ARCHIVE_KEY, JSON.stringify(arr));
+    },
+
+    saveArchive: function (st) {
+      var copy = JSON.parse(JSON.stringify(st));
+      copy.steps.forEach(function (s) { s.editing = false; });
+      copy.updatedAt = new Date().toISOString();
+      var archive = this.getArchive();
+      var idx = -1;
+      for (var i = 0; i < archive.length; i++) { if (archive[i].id === copy.id) { idx = i; break; } }
+      if (idx >= 0) archive[idx] = copy; else archive.unshift(copy);
+      this.setArchive(archive);
+    },
+
+    deleteArchive: function (id) {
+      var archive = this.getArchive().filter(function (e) { return e.id !== id; });
+      this.setArchive(archive);
+      return archive;
+    },
+
+    importData: function (fileContent) {
+      try {
+        var imported = JSON.parse(fileContent);
+        if (!Array.isArray(imported)) imported = [imported];
+        imported = imported.map(normalizeState).filter(function (x) { return x; });
+        if (imported.length === 0) return false;
+        var current = this.getArchive();
+        var merged = imported.concat(current.filter(function (c) {
+          return !imported.some(function (i) { return i.id === c.id; });
+        }));
+        this.setArchive(merged);
+        return true;
+      } catch (e) { return false; }
+    }
+  };
+
+  /* ==========================================================================
+     3. APPLICATION & INTERFACE
+     ========================================================================== */
+  var state = StorageService.loadCurrent() || {
+    id: Date.now().toString(),
+    title: 'Exercice 1',
+    updatedAt: new Date().toISOString(),
+    activeIndex: 0,
+    steps: [{ raw: '', editing: true }]
+  };
+
+  var toastTimer = null;
+  function showToast(msg) {
+    var t = document.getElementById('status-toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 1800);
+  }
+
+  var AUTO_PAIRS = { '(': ')', '[': ']', '{': '}', '«': '»' };
+  var AUTO_CLOSERS = [')', ']', '}', '»'];
+
+  function safeFormat(raw) {
+    try { return MathEngine.formatHTML(raw); }
+    catch (e) { return String(raw).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  }
+
+  function updatePreview(idx) {
+    var el = document.getElementById('step-preview-' + idx);
+    if (el && state.steps[idx]) el.innerHTML = safeFormat(state.steps[idx].raw);
+  }
+
+  function syncInput(idx, el) {
+    if (!state.steps[idx]) return;
+    state.steps[idx].raw = el.value;
+    StorageService.saveCurrent(state);
+    updatePreview(idx);
+  }
+
+  // Collage intelligent : LaTeX, $...$, plusieurs lignes, connecteurs (⇒, ⇔, Donc, Or)
+  function pasteInto(idx, input, text) {
+    var lines = MathEngine.cleanPaste(text);
+    if (!lines.length) return;
+    var cur = state.steps[idx];
+    if (lines.length === 1 && cur.raw.trim()) {
+      var s = input.selectionStart == null ? input.value.length : input.selectionStart;
+      var e = input.selectionEnd == null ? input.value.length : input.selectionEnd;
+      var ins = lines[0].raw;
+      input.value = input.value.slice(0, s) + ins + input.value.slice(e);
+      input.setSelectionRange(s + ins.length, s + ins.length);
+      syncInput(idx, input);
+      return;
+    }
+    var list = lines.slice();
+    if (!cur.raw.trim()) {
+      var f = list.shift();
+      cur.raw = f.raw;
+    }
+    var pos = idx;
+    list.forEach(function (ln) {
+      state.steps.splice(++pos, 0, { raw: ln.raw, editing: false });
+    });
+    setActive(pos);
+    StorageService.saveCurrent(state);
+    render();
+    showToast(lines.length > 1 ? lines.length + ' lignes collées' : 'Collé');
+  }
+
+  function setActive(idx) {
+    state.steps.forEach(function (s, i) { s.editing = (i === idx); });
+    state.activeIndex = idx;
+  }
+
+  function render() {
+    var titleInput = document.getElementById('exo-title');
+    if (document.activeElement !== titleInput) titleInput.value = state.title;
+
+    var container = document.getElementById('steps-list');
+    container.innerHTML = '';
+    var markCount = 0;
+
+    state.steps.forEach(function (step, idx) {
+      var row = document.createElement('div');
+      row.className = 'step-row' + (idx === state.activeIndex ? ' active' : '');
+
+      var num = document.createElement('span');
+      num.className = 'step-num';
+      if (idx === 0) num.textContent = '1';
+      else if (step.mark) { markCount++; num.textContent = String(markCount + 1); }
+      row.appendChild(num);
+
+      var content = document.createElement('div');
+      content.className = 'step-content';
+
+      if (idx === state.activeIndex) {
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'step-input';
+        input.id = 'step-input-' + idx;
+        input.value = step.raw;
+        input.placeholder = idx === 0 ? 'Ex: (2x + 1)/3 = x^2 - 4' : 'Étape suivante...';
+        input.setAttribute('autocomplete', 'off');
+        input.setAttribute('enterkeyhint', 'next');
+        input.setAttribute('autocapitalize', 'off');
+        input.setAttribute('autocorrect', 'off');
+        input.spellcheck = false;
+
+        input.addEventListener('paste', function (e) {
+          var cd = e.clipboardData || window.clipboardData;
+          var txt = cd ? cd.getData('text') : '';
+          if (!txt) return;
+          e.preventDefault();
+          pasteInto(idx, input, txt);
+        });
+
+        // Fermeture automatique des ( ) [ ] { } « »
+        input.addEventListener('beforeinput', function (e) {
+          var el = e.target;
+          var s = el.selectionStart, en = el.selectionEnd;
+          if (s == null || en == null) return;
+
+          // Saisie d'un symbole ouvrant avec du texte sélectionné : on entoure la sélection
+          if (e.inputType === 'insertText' && e.data && AUTO_PAIRS[e.data] && s !== en) {
+            e.preventDefault();
+            var sel = el.value.slice(s, en);
+            el.value = el.value.slice(0, s) + e.data + sel + AUTO_PAIRS[e.data] + el.value.slice(en);
+            el.setSelectionRange(s + 1, s + 1 + sel.length);
+            syncInput(idx, el);
+            return;
+          }
+
+          // Retour arrière entre deux symboles appariés "(|)" : on supprime les deux
+          if (e.inputType === 'deleteContentBackward' && s === en && s > 0) {
+            var before = el.value.charAt(s - 1);
+            var after = el.value.charAt(s);
+            if (AUTO_PAIRS[before] && AUTO_PAIRS[before] === after) {
+              e.preventDefault();
+              el.value = el.value.slice(0, s - 1) + el.value.slice(s + 1);
+              el.setSelectionRange(s - 1, s - 1);
+              syncInput(idx, el);
+            }
+          }
+        });
+
+        input.addEventListener('input', function (e) {
+          var el = e.target;
+          if (e.inputType === 'insertText' && e.data && e.data.length === 1) {
+            var pos = el.selectionStart;
+            var typed = e.data;
+            if (pos != null && pos === el.selectionEnd) {
+              if (AUTO_PAIRS[typed]) {
+                // Symbole ouvrant : on ajoute le fermant juste après le curseur
+                el.value = el.value.slice(0, pos) + AUTO_PAIRS[typed] + el.value.slice(pos);
+                el.setSelectionRange(pos, pos);
+              } else if (AUTO_CLOSERS.indexOf(typed) !== -1 && el.value.charAt(pos) === typed) {
+                // Symbole fermant déjà présent juste après : on le "saute" au lieu de le doubler
+                el.value = el.value.slice(0, pos) + el.value.slice(pos + 1);
+                el.setSelectionRange(pos, pos);
+              }
+            }
+          }
+          syncInput(idx, el);
+        });
+
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            validateAndNext(false);
+          }
+        });
+
+        content.appendChild(input);
+
+        var preview = document.createElement('div');
+        preview.className = 'step-preview';
+        preview.id = 'step-preview-' + idx;
+        preview.innerHTML = safeFormat(step.raw);
+        content.appendChild(preview);
+      } else {
+        var rendered = document.createElement('div');
+        rendered.className = 'step-rendered';
+        if (!step.raw.trim()) {
+          rendered.classList.add('empty-placeholder');
+          rendered.textContent = 'Appuyer pour écrire...';
+        } else {
+          rendered.innerHTML = safeFormat(step.raw);
+        }
+        rendered.addEventListener('click', function (e) {
+          e.stopPropagation();
+          setActive(idx);
+          StorageService.saveCurrent(state);
+          render();
+        });
+        content.appendChild(rendered);
+      }
+
+      row.appendChild(content);
+
+      if (state.steps.length > 1 && idx === state.activeIndex) {
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'del-step-btn';
+        delBtn.textContent = '✕';
+        delBtn.setAttribute('aria-label', 'Supprimer la ligne');
+        delBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          state.steps.splice(idx, 1);
+          var a = state.activeIndex;
+          if (idx < a) a--;
+          if (a >= state.steps.length) a = state.steps.length - 1;
+          if (a < 0) a = 0;
+          setActive(a);
+          StorageService.saveCurrent(state);
+          render();
+        });
+        row.appendChild(delBtn);
+      }
+
+      container.appendChild(row);
+    });
+
+    updateConnectorsUI();
+
+    var activeInput = document.getElementById('step-input-' + state.activeIndex);
+    if (activeInput) {
+      activeInput.focus();
+      var len = activeInput.value.length;
+      try { activeInput.setSelectionRange(len, len); } catch (e) {}
+    }
+  }
+
+  // Cliquer sur le fond de l'espace de travail réveille le clavier sur la ligne active
+  document.getElementById('workspace').addEventListener('click', function (e) {
+    if (e.target.id === 'workspace' || e.target.id === 'steps-list') {
+      var activeInput = document.getElementById('step-input-' + state.activeIndex);
+      if (activeInput) activeInput.focus();
+    }
+  });
+
+  function updateConnectorsUI() {
+    var st = state.steps[state.activeIndex];
+    var curConn = st ? st.connector : '';
+    document.querySelectorAll('.tool-btn.conn').forEach(function (btn) {
+      btn.classList.toggle('selected', btn.dataset.conn === curConn);
+    });
+  }
+
+  function validateAndNext(duplicate) {
+    var curr = state.activeIndex;
+    if (curr < 0 || curr >= state.steps.length) curr = state.steps.length - 1;
+    state.steps[curr].editing = false;
+    var newStep = {
+      raw: duplicate ? state.steps[curr].raw : '',
+      editing: true
+    };
+    state.steps.splice(curr + 1, 0, newStep);
+    setActive(curr + 1);
+    StorageService.saveCurrent(state);
+    render();
+    var ws = document.getElementById('workspace');
+    setTimeout(function () {
+      try { ws.scrollTo({ top: ws.scrollHeight, behavior: 'smooth' }); }
+      catch (e) { ws.scrollTop = ws.scrollHeight; }
+    }, 30);
+  }
+
+  function getActiveInput() {
+    return document.getElementById('step-input-' + state.activeIndex);
+  }
+
+  function insertToInput(text) {
+    var input = getActiveInput();
+    if (!input) return;
+    var start = input.selectionStart == null ? input.value.length : input.selectionStart;
+    var end = input.selectionEnd == null ? input.value.length : input.selectionEnd;
+    input.value = input.value.slice(0, start) + text + input.value.slice(end);
+    state.steps[state.activeIndex].raw = input.value;
+    var pos = /(\(\)|\[\]|«»)$/.test(text) ? start + text.length - 1 : start + text.length;
+    input.focus();
+    input.setSelectionRange(pos, pos);
+    StorageService.saveCurrent(state);
+    updatePreview(state.activeIndex);
+  }
+
+  function insertFracOrSqrt(type) {
+    var input = getActiveInput();
+    if (!input) return;
+    var start = input.selectionStart == null ? input.value.length : input.selectionStart;
+    var end = input.selectionEnd == null ? input.value.length : input.selectionEnd;
+    var sel = input.value.slice(start, end);
+    var snippet, pos;
+    if (type === 'frac') {
+      snippet = sel ? '(' + sel + ')/()' : '()/()';
+      pos = sel ? start + sel.length + 4 : start + 1;   // curseur dans le dénominateur / numérateur
+    } else {
+      snippet = sel ? 'sqrt(' + sel + ')' : 'sqrt()';
+      pos = sel ? start + 5 + sel.length + 1 : start + 5;
+    }
+    input.value = input.value.slice(0, start) + snippet + input.value.slice(end);
+    state.steps[state.activeIndex].raw = input.value;
+    input.focus();
+    input.setSelectionRange(pos, pos);
+    StorageService.saveCurrent(state);
+    updatePreview(state.activeIndex);
+  }
+
+  /* ==========================================================================
+     4. ÉVÉNEMENTS
+     ========================================================================== */
+
+  // Empêche la barre d'outils de voler le focus (sinon le clavier se ferme à chaque clic)
+  var toolbar = document.getElementById('toolbar-container');
+  ['mousedown', 'pointerdown'].forEach(function (evt) {
+    toolbar.addEventListener(evt, function (e) {
+      if (e.target.closest && e.target.closest('button')) e.preventDefault();
+    });
+  });
+
+  document.getElementById('exo-title').addEventListener('input', function (e) {
+    state.title = e.target.value;
+    StorageService.saveCurrent(state);
+  });
+  document.getElementById('exo-title').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); render(); }
+  });
+
+  document.getElementById('btn-new').addEventListener('click', function () {
+    if (hasContent(state)) StorageService.saveArchive(state);
+    state = {
+      id: Date.now().toString(),
+      title: 'Exercice ' + (StorageService.getArchive().length + 1),
+      updatedAt: new Date().toISOString(),
+      activeIndex: 0,
+      steps: [{ raw: '', editing: true }]
+    };
+    StorageService.saveCurrent(state);
+    render();
+    showToast('Nouvelle feuille prête');
+  });
+
+  document.getElementById('btn-library').addEventListener('click', function () {
+    if (hasContent(state)) StorageService.saveArchive(state);
+    renderLibraryList();
+    document.getElementById('library-modal').classList.add('open');
+  });
+
+  document.getElementById('modal-close').addEventListener('click', function () {
+    document.getElementById('library-modal').classList.remove('open');
+  });
+
+  document.getElementById('library-modal').addEventListener('click', function (e) {
+    if (e.target.id === 'library-modal') e.target.classList.remove('open');
+  });
+
+  document.getElementById('btn-pdf').addEventListener('click', function () {
+    var prev = state.activeIndex;
+    state.steps.forEach(function (s) { s.editing = false; });
+    state.activeIndex = -1;
+    render();
+    document.getElementById('print-title').textContent = state.title || 'Exercice';
+    document.getElementById('print-date').textContent = 'Généré le ' + new Date().toLocaleDateString('fr-FR');
+
+    var restored = false;
+    var restore = function () {
+      if (restored) return;
+      restored = true;
+      window.removeEventListener('afterprint', restore);
+      setActive(prev >= 0 && prev < state.steps.length ? prev : state.steps.length - 1);
+      render();
+    };
+    window.addEventListener('afterprint', restore);
+    setTimeout(function () { window.print(); }, 150);
+  });
+
+  document.getElementById('btn-dup').addEventListener('click', function () { validateAndNext(true); });
+
+  document.querySelectorAll('.tool-btn.conn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var conn = btn.dataset.conn;
+      var step = state.steps[state.activeIndex];
+      if (!step) return;
+      step.connector = (step.connector === conn) ? '' : conn;
+      StorageService.saveCurrent(state);
+      render();
+    });
+  });
+
+  document.querySelectorAll('.tool-btn[data-action="insert"]').forEach(function (btn) {
+    btn.addEventListener('click', function () { insertToInput(btn.dataset.val); });
+  });
+  document.querySelectorAll('.tool-btn[data-action="frac"]').forEach(function (btn) {
+    btn.addEventListener('click', function () { insertFracOrSqrt('frac'); });
+  });
+  document.querySelectorAll('.tool-btn[data-action="wrap"]').forEach(function (btn) {
+    btn.addEventListener('click', function () { insertWrap(btn.dataset.val); });
+  });
+  document.getElementById('btn-mark').addEventListener('click', toggleMark);
+  document.getElementById('btn-copy').addEventListener('click', copyAll);
+  document.querySelectorAll('.tool-btn[data-action="sqrt"]').forEach(function (btn) {
+    btn.addEventListener('click', function () { insertFracOrSqrt('sqrt'); });
+  });
+
+  document.getElementById('modal-save-arch').addEventListener('click', function () {
+    StorageService.saveArchive(state);
+    showToast('Exercice archivé');
+    renderLibraryList();
+  });
+
+  document.getElementById('modal-dl-json').addEventListener('click', function () {
+    StorageService.saveArchive(state);
+    var dataStr = JSON.stringify(StorageService.getArchive(), null, 2);
+    var blob = new Blob([dataStr], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'mathpad_exercices_' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    showToast('JSON téléchargé');
+  });
+
+  document.getElementById('json-import').addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (evt) {
+      var success = StorageService.importData(evt.target.result);
+      if (success) {
+        renderLibraryList();
+        showToast('JSON importé avec succès');
+      } else {
+        alert('Fichier JSON invalide');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';   // permet de réimporter le même fichier
+  });
+
+  function renderLibraryList() {
+    var list = document.getElementById('saved-list');
+    var archive = StorageService.getArchive();
+    list.innerHTML = '';
+    if (archive.length === 0) {
+      var empty = document.createElement('p');
+      empty.style.cssText = 'color:var(--text-muted); text-align:center;';
+      empty.textContent = 'Aucun exercice archivé.';
+      list.appendChild(empty);
+      return;
+    }
+    archive.forEach(function (exo) {
+      var item = document.createElement('div');
+      item.className = 'saved-item';
+
+      var info = document.createElement('div');
+      info.className = 'saved-info';
+      var d = new Date(exo.updatedAt);
+      var dateStr = isNaN(d.getTime()) ? '' : d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      var nSteps = Array.isArray(exo.steps) ? exo.steps.length : 0;
+
+      var t = document.createElement('div');
+      t.className = 'saved-title';
+      t.textContent = exo.title || 'Sans titre';   // textContent : pas d'injection HTML
+      var m = document.createElement('div');
+      m.className = 'saved-meta';
+      m.textContent = nSteps + ' ligne(s) • ' + dateStr;
+      info.appendChild(t);
+      info.appendChild(m);
+
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'icon-btn';
+      del.style.color = 'var(--danger)';
+      del.textContent = '🗑';
+
+      info.addEventListener('click', function () {
+        var loaded = normalizeState(JSON.parse(JSON.stringify(exo)));
+        if (!loaded) return;
+        state = loaded;
+        StorageService.saveCurrent(state);
+        render();
+        document.getElementById('library-modal').classList.remove('open');
+        showToast('Exercice chargé');
+      });
+      del.addEventListener('click', function () {
+        if (!confirm('Supprimer « ' + (exo.title || 'Sans titre') + ' » ?')) return;
+        StorageService.deleteArchive(exo.id);
+        renderLibraryList();
+      });
+
+      item.appendChild(info);
+      item.appendChild(del);
+      list.appendChild(item);
+    });
+  }
+
+  // Insertion « nom(sélection) » : sin, cos, tan, hat (chapeau d'angle)
+  function insertWrap(name) {
+    var input = getActiveInput();
+    if (!input) return;
+    var start = input.selectionStart == null ? input.value.length : input.selectionStart;
+    var end = input.selectionEnd == null ? input.value.length : input.selectionEnd;
+    var sel = input.value.slice(start, end);
+    input.value = input.value.slice(0, start) + name + '(' + sel + ')' + input.value.slice(end);
+    var pos = start + name.length + 1 + (sel ? sel.length + 1 : 0);
+    state.steps[state.activeIndex].raw = input.value;
+    input.focus();
+    input.setSelectionRange(pos, pos);
+    StorageService.saveCurrent(state);
+    updatePreview(state.activeIndex);
+  }
+
+  // Numérotation d'une partie de l'exercice (la ligne 1 est toujours « 1 »)
+  function toggleMark() {
+    var i = state.activeIndex;
+    if (i <= 0) { showToast('La ligne 1 est toujours numérotée'); return; }
+    state.steps[i].mark = !state.steps[i].mark;
+    StorageService.saveCurrent(state);
+    render();
+    showToast(state.steps[i].mark ? 'Ligne numérotée' : 'Numéro retiré');
+  }
+
+  // Tout copier
+  function exportText() {
+    var n = 0, lines = [];
+    state.steps.forEach(function (s, i) {
+      if (!s.raw.trim()) return;
+      var label = '';
+      if (i === 0) label = '1. ';
+      else if (s.mark) { n++; label = (n + 1) + '. '; }
+      lines.push(label + s.raw);
+    });
+    return lines.join('\n');
+  }
+
+  function copyAll() {
+    var text = exportText();
+    if (!text) { showToast('Rien à copier'); return; }
+    var done = function () { showToast('Toutes les lignes copiées'); };
+    var fallback = function () {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+      document.body.appendChild(ta);
+      ta.select();
+      try { ta.setSelectionRange(0, text.length); } catch (e) {}
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      if (ok) done(); else showToast('Copie impossible');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  }
+
+  // Menu déroulant
+  var menuBtn = document.getElementById('menu-btn');
+  var menuPanel = document.getElementById('menu-panel');
+  function setMenu(open) {
+    menuPanel.hidden = !open;
+    menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  menuBtn.addEventListener('click', function (e) { e.stopPropagation(); setMenu(menuPanel.hidden); });
+  document.addEventListener('click', function (e) { if (!menuPanel.hidden && !menuPanel.contains(e.target)) setMenu(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setMenu(false); });
+  ['btn-new', 'btn-library', 'btn-pdf'].forEach(function (id) {
+    document.getElementById(id).addEventListener('click', function () { setMenu(false); });
+  });
+
+  // Taille de la police (toutes les lignes)
+  var FONT_KEY = 'mathpad_font_size_v1';
+  var fontRange = document.getElementById('font-range');
+  function applyFont(px) {
+    px = Math.max(6, Math.min(44, Math.round(px)));
+    document.documentElement.style.setProperty('--math-size', px + 'px');
+    fontRange.value = px;
+    document.getElementById('font-label').textContent = px + ' px';
+    lsSet(FONT_KEY, String(px));
+  }
+  var savedFont = parseInt(lsGet(FONT_KEY), 10);
+  applyFont(savedFont >= 6 && savedFont <= 44 ? savedFont : 20);
+  fontRange.addEventListener('input', function () { applyFont(parseInt(fontRange.value, 10)); });
+  document.getElementById('font-minus').addEventListener('click', function () { applyFont(parseInt(fontRange.value, 10) - 2); });
+  document.getElementById('font-plus').addEventListener('click', function () { applyFont(parseInt(fontRange.value, 10) + 2); });
+  ['font-minus', 'font-plus'].forEach(function (id) {
+    document.getElementById(id).addEventListener('mousedown', function (e) { e.preventDefault(); });
+  });
+
+  // Lancement initial
+  render();
+
+  // Mode hors ligne / installation (PWA)
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+  }
+</script>
+</body>
+</html>
